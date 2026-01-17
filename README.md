@@ -3,7 +3,7 @@
 
 MoneyMate is a self-hosted, privacy-focused web application to track your income, expenses, and investments. It runs locally using PHP and SQLite, ensuring your financial data never leaves your machine.
 
-![MoneyMate Dashboard](assets/logo.png)
+![MoneyMate Dashboard](assets/icon-512.png)
 
 ## 🚀 Key Features
 
