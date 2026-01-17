@@ -94,3 +94,32 @@ MoneyMate is optimized for **Groww** users.
 ---
 
 ## 📂 Project Structure
+
+
+```
+
+MoneyMate/
+├── app/
+│   ├── db.php          # Database connection
+│   ├── auth.php        # Login session logic
+│   ├── finance.php     # Financial calculations & logic
+│   └── layout.php      # HTML Header/Footer & PWA links
+├── assets/             # CSS & Icons
+├── data/               # SQLite Database (created after install)
+├── api/                # Internal JSON APIs for charts
+├── docker-compose.yml  # Container config
+├── index.php           # Dashboard
+├── investments.php     # Portfolio Manager
+├── recurring.php       # Recurring Manager
+└── sw.js               # Service Worker for PWA
+
+```
+
+## ⚠️ "Danger Zone"
+If your investment data gets messy (e.g., wrong CSV imports):
+1.  Go to the **Investments** page.
+2.  Scroll to the bottom.
+3.  Click **Reset All Data** to wipe only the investment tables and start fresh.
+
+---
+*Created for personal financial freedom.*
