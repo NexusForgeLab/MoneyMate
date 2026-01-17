@@ -1,34 +1,96 @@
-# FinTrack (PHP + SQLite) — Docker Ready
+# 💰 MoneyMate
+**Your Personal Finance & Investment Portfolio Tracker**
 
-FinTrack is a lightweight personal finance tracker:
-- Add **income** (salary / other)
-- Add **expenses** with category + reason
-- Charts: **line** (trend), **pie** (income vs expense, expense categories)
-- Track **stocks & mutual funds** manually
-- Profit tracking using **current price** + holdings
+MoneyMate is a self-hosted, privacy-focused web application to track your income, expenses, and investments. It runs locally using PHP and SQLite, ensuring your financial data never leaves your machine.
 
-## Run (Docker)
-```bash
-docker compose up -d --build
-```
+![MoneyMate Dashboard](assets/logo.png)
 
-Open:
-- http://YOUR_SERVER_IP:8093/install.php  (one time)
-- then http://YOUR_SERVER_IP:8093
+## 🚀 Key Features
 
-Default users:
-- admin / admin123
-- user / user123
+### 📊 Dashboard & Analytics
+* **Net Worth Calculator:** Live view of your total wealth (Cash + Stocks + Mutual Funds).
+* **Trend Analysis:** Interactive charts showing income vs. expenses over the last 12 months.
+* **Category Breakdown:** See exactly where your money goes.
 
-After install, delete install.php:
-```bash
-rm install.php
-```
+### 📈 Investment Portfolio (New!)
+* **Groww Integration:** Seamlessly import your **Stock** and **Mutual Fund** "Order History" CSVs from Groww.
+* **Auto-Calculation:** Automatically calculates average buy price, current holdings, and unrealized Profit & Loss.
+* **Transaction History:** Keeps a full record of every Buy, Sell, SIP, and Redemption.
+* **Duplicate Protection:** Smart import logic prevents duplicate entries if you upload the same file twice.
 
-## If you see "unable to open database file"
-```bash
-mkdir -p data
-sudo chown -R 33:33 data
-sudo chmod -R 775 data
-docker compose restart
-```
+### 🔄 Automation
+* **Recurring Transactions:** Set up your Salary or Monthly Subscriptions once, and they auto-add to your ledger every month.
+
+### 📱 Mobile Experience (PWA)
+* **Installable App:** Add to your phone's home screen (Android & iOS).
+* **App Icon:** Dedicated launcher icon.
+* **Fullscreen Mode:** Feels like a native app.
+
+### 🔒 Security & Data
+* **Single User:** Designed for personal use with a secure login.
+* **Local DB:** Uses SQLite. No external database server required.
+* **Backup:** One-click download of your entire database (`.db`) from Settings.
+
+---
+
+## 🛠️ Installation (Docker)
+
+The easiest way to run MoneyMate is using Docker.
+
+### Prerequisites
+* [Docker Desktop](https://www.docker.com/products/docker-desktop) installed.
+
+### Step-by-Step Setup
+
+1.  **Download the Code**
+    Place all the project files in a folder named `MoneyMate`.
+
+2.  **Start the Container**
+    Open your terminal/command prompt in the folder and run:
+    ```bash
+    docker compose up -d
+    ```
+
+3.  **Run the Installer**
+    Open your browser and visit:
+    http://localhost:8000/install.php
+
+    * This will create the database and the default admin user.
+    * **Default Login:** `admin`
+    * **Default Password:** `admin123`
+
+4.  **Login**
+    Go to `http://localhost:8000/login.php` and sign in.
+
+---
+
+## 📖 How to Use
+
+### 1. Tracking Investments (Groww Import)
+MoneyMate is optimized for **Groww** users.
+1.  Log in to Groww Web.
+2.  Click your profile → **Reports**.
+3.  Scroll down to **Transactions** (Important: Do not use "Holdings").
+4.  Download **Stocks - Order history** and **Mutual Funds - Order history**.
+5.  Open the downloaded files in Excel/Sheets and **Save As CSV (Comma delimited)**.
+6.  In MoneyMate, go to **Investments** and upload the CSVs.
+    * *Note: Sold stocks or redeemed funds are automatically hidden from the active portfolio view but saved in history.*
+
+### 2. Setting up Recurring Items
+1.  Go to the **Recurring** tab.
+2.  Add your **Salary** (Income) and select the day (e.g., 1st of month).
+3.  Add **Subscriptions** (Expense) like Netflix, Gym, etc.
+4.  MoneyMate will automatically create these transactions when you visit the dashboard on/after that date.
+
+### 3. Installing on Mobile
+* **Android (Chrome):** Open the site → Tap "Add to Home screen" prompt or 3-dot menu → Install App.
+* **iOS (Safari):** Tap Share button → "Add to Home Screen".
+
+### 4. Backups
+* Go to **Settings**.
+* Click **Download Database**. Save this `.db` file securely.
+* To restore: Replace the `data/finance.db` file in your project folder with your backup.
+
+---
+
+## 📂 Project Structure
