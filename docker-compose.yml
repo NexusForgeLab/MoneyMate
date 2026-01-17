@@ -1,0 +1,9 @@
+services:
+  web:
+    build: .
+    container_name: money-mate
+    ports:
+      - "8093:80"
+    volumes:
+      - ./data:/var/www/html/data
+    restart: unless-stopped
