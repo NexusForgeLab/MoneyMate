@@ -1,0 +1,9 @@
+# Ignore the specific backups folder
+data/backups/
+
+# Ignore all SQLite database files (Vital for security!)
+data/*.db
+
+# Ignore system files (Optional but recommended)
+.DS_Store
+Thumbs.db
