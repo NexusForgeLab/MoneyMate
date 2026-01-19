@@ -2,7 +2,7 @@
 require_once __DIR__ . '/app/db.php';
 $pdo = db();
 
-// 1. Existing Tables
+// 1. Tables (No changes to logic, just structure)
 $pdo->exec("
 CREATE TABLE IF NOT EXISTS users(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,7 +27,6 @@ CREATE TABLE IF NOT EXISTS transactions(
   reason TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX IF NOT EXISTS idx_tx_user_date ON transactions(user_id, tx_date);
 CREATE TABLE IF NOT EXISTS investments(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -50,10 +49,6 @@ CREATE TABLE IF NOT EXISTS investment_txs(
   note TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-");
-
-// 2. NEW TABLE: Recurring Transactions
-$pdo->exec("
 CREATE TABLE IF NOT EXISTS recurring(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -65,9 +60,24 @@ CREATE TABLE IF NOT EXISTS recurring(
   last_run_month TEXT DEFAULT NULL, 
   active INTEGER DEFAULT 1
 );
+CREATE TABLE IF NOT EXISTS milestones(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 5),
+  name TEXT NOT NULL,
+  amount REAL NOT NULL CHECK(amount>0),
+  UNIQUE(user_id, level)
+);
 ");
 
-// 3. Create Admin if missing
+// 2. PERFORMANCE INDEXES (Speed up queries)
+$pdo->exec("CREATE INDEX IF NOT EXISTS idx_tx_user_date ON transactions(user_id, tx_date);");
+$pdo->exec("CREATE INDEX IF NOT EXISTS idx_tx_user_type ON transactions(user_id, tx_type);");
+$pdo->exec("CREATE INDEX IF NOT EXISTS idx_tx_user_cat ON transactions(user_id, category_id);");
+$pdo->exec("CREATE INDEX IF NOT EXISTS idx_inv_user ON investments(user_id);");
+$pdo->exec("CREATE INDEX IF NOT EXISTS idx_invt_user_inv ON investment_txs(user_id, investment_id);");
+
+// 3. Create Admin
 $exists = (int)($pdo->query("SELECT COUNT(*) FROM users")->fetchColumn());
 if ($exists === 0) {
   $st = $pdo->prepare("INSERT INTO users(username, pass_hash, display_name, role) VALUES (?,?,?,?)");
@@ -75,6 +85,6 @@ if ($exists === 0) {
 }
 
 echo "<h2>Update Complete ✅</h2>";
-echo "<p>Database schema updated. You can delete this file or keep it for future updates.</p>";
+echo "<p>Database optimized with new indexes and logic.</p>";
 echo "<p><a href='/'>Go to Dashboard</a></p>";
 ?>

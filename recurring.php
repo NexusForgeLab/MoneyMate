@@ -94,30 +94,32 @@ render_header('Recurring', $user);
   <div class="col-8">
     <div class="card">
       <h2>Active Recurring Items</h2>
-      <table>
-        <thead><tr><th>Day</th><th>Type</th><th>Description</th><th>Amount</th><th>Action</th></tr></thead>
-        <tbody>
-          <?php foreach($rec as $r): ?>
-            <tr>
-              <td>Day <b><?php echo (int)$r['day_of_month']; ?></b></td>
-              <td><span class="pill <?php echo $r['type']==='income'?'good':'bad'; ?>"><?php echo h($r['type']); ?></span></td>
-              <td>
-                <?php echo h($r['description']); ?>
-                <div class="muted"><?php echo h($r['cat_name']); ?></div>
-              </td>
-              <td><b>₹<?php echo number_format($r['amount'],2); ?></b></td>
-              <td>
-                 <form method="post" onsubmit="return confirm('Stop this recurring item?');">
-                    <input type="hidden" name="csrf" value="<?php echo h(csrf_token()); ?>"/>
-                    <input type="hidden" name="action" value="delete"/>
-                    <input type="hidden" name="id" value="<?php echo $r['id']; ?>"/>
-                    <button class="btn bad" style="padding:4px 8px;font-size:12px">Remove</button>
-                 </form>
-              </td>
-            </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
+      <div class="table-scroll">
+          <table>
+            <thead><tr><th>Day</th><th>Type</th><th>Description</th><th>Amount</th><th>Action</th></tr></thead>
+            <tbody>
+              <?php foreach($rec as $r): ?>
+                <tr>
+                  <td>Day <b><?php echo (int)$r['day_of_month']; ?></b></td>
+                  <td><span class="pill <?php echo $r['type']==='income'?'good':'bad'; ?>"><?php echo h($r['type']); ?></span></td>
+                  <td>
+                    <?php echo h($r['description']); ?>
+                    <div class="muted"><?php echo h($r['cat_name']); ?></div>
+                  </td>
+                  <td><b>₹<?php echo number_format($r['amount'],2); ?></b></td>
+                  <td>
+                     <form method="post" onsubmit="return confirm('Stop this recurring item?');">
+                        <input type="hidden" name="csrf" value="<?php echo h(csrf_token()); ?>"/>
+                        <input type="hidden" name="action" value="delete"/>
+                        <input type="hidden" name="id" value="<?php echo $r['id']; ?>"/>
+                        <button class="btn bad" style="padding:4px 8px;font-size:12px">Remove</button>
+                     </form>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+      </div>
     </div>
   </div>
 </div>

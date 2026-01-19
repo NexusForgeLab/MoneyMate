@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/db.php';
 
-// --- EXISTING FUNCTIONS (Keep these) ---
+// --- CORE FUNCTIONS ---
 
 function totals_for_range(int $userId, string $from, string $to): array {
   $pdo = db();
@@ -21,15 +21,40 @@ function month_start_end(?string $ym = null): array {
   return [$ym . '-01', date('Y-m-t', strtotime($ym . '-01'))];
 }
 
+// OPTIMIZED: Single query instead of looping 12 times
 function last_n_months(int $userId, int $n=12): array {
-  $out = [];
+  $pdo = db();
+  // Generate list of last N months in PHP to ensure we have entries even for months with 0 data
+  $months = [];
   for($i=$n-1; $i>=0; $i--){
-    $dt = new DateTime('first day of this month');
-    $dt->modify("-$i months");
-    $ym = $dt->format('Y-m');
-    [$from,$to] = month_start_end($ym);
-    $t = totals_for_range($userId, $from, $to);
-    $out[] = ['month'=>$ym, 'income'=>$t['income'], 'expense'=>$t['expense'], 'net'=>$t['net']];
+      $months[date('Y-m', strtotime("-$i months"))] = ['income'=>0.0, 'expense'=>0.0, 'net'=>0.0];
+  }
+
+  $start_date = date('Y-m-01', strtotime("-".($n-1)." months"));
+  
+  $sql = "SELECT strftime('%Y-%m', tx_date) as m, tx_type, SUM(amount) as total 
+          FROM transactions 
+          WHERE user_id=? AND tx_date >= ? 
+          GROUP BY m, tx_type";
+          
+  $st = $pdo->prepare($sql);
+  $st->execute([$userId, $start_date]);
+  
+  while($r = $st->fetch()){
+      if(isset($months[$r['m']])){
+          if($r['tx_type'] === 'income') $months[$r['m']]['income'] = (float)$r['total'];
+          if($r['tx_type'] === 'expense') $months[$r['m']]['expense'] = (float)$r['total'];
+      }
+  }
+
+  $out = [];
+  foreach($months as $ym => $data){
+      $out[] = [
+          'month' => $ym,
+          'income' => $data['income'],
+          'expense' => $data['expense'],
+          'net' => $data['income'] - $data['expense']
+      ];
   }
   return $out;
 }
@@ -41,20 +66,34 @@ function expense_by_category(int $userId, string $from, string $to): array {
   return $st->fetchAll();
 }
 
+// OPTIMIZED: Solves N+1 Query Problem
 function investment_summary(int $userId): array {
   $pdo = db();
-  // Simplified logic for brevity, same as before
-  $st = $pdo->prepare("SELECT i.id, i.asset_type, i.symbol, i.name, i.current_price FROM investments i WHERE i.user_id=?");
+  
+  // Single query to get all investments AND their calculated totals
+  $sql = "
+    SELECT 
+        i.id, i.asset_type, i.symbol, i.name, i.current_price,
+        COALESCE(SUM(CASE WHEN it.side='BUY' THEN it.units ELSE 0 END), 0) as units_bought,
+        COALESCE(SUM(CASE WHEN it.side='SELL' THEN it.units ELSE 0 END), 0) as units_sold,
+        COALESCE(SUM(CASE WHEN it.side='BUY' THEN it.units * it.price ELSE 0 END), 0) as total_cost
+    FROM investments i
+    LEFT JOIN investment_txs it ON i.id = it.investment_id
+    WHERE i.user_id = ?
+    GROUP BY i.id
+  ";
+
+  $st = $pdo->prepare($sql);
   $st->execute([$userId]);
+  
   $rows=[];
   while($r=$st->fetch()){
-    $units_buy = (float)($pdo->query("SELECT COALESCE(SUM(units),0) FROM investment_txs WHERE investment_id=".$r['id']." AND side='BUY'")->fetchColumn());
-    $units_sell = (float)($pdo->query("SELECT COALESCE(SUM(units),0) FROM investment_txs WHERE investment_id=".$r['id']." AND side='SELL'")->fetchColumn());
-    $units = $units_buy - $units_sell;
+    $units = (float)$r['units_bought'] - (float)$r['units_sold'];
+    $cost = (float)$r['total_cost'];
+    $units_bought = (float)$r['units_bought'];
     
-    // Avg Price Calc
-    $cost = (float)($pdo->query("SELECT COALESCE(SUM(units*price),0) FROM investment_txs WHERE investment_id=".$r['id']." AND side='BUY'")->fetchColumn());
-    $avg = ($units_buy > 0) ? $cost / $units_buy : 0;
+    // Calculate Average Buy Price
+    $avg = ($units_bought > 0) ? $cost / $units_bought : 0;
 
     $cur = (float)$r['current_price'];
     $mkt = $units * $cur;
@@ -68,13 +107,10 @@ function investment_summary(int $userId): array {
   return $rows;
 }
 
-// --- NEW FEATURES BELOW ---
-
-// 1. Calculate Total Net Worth
 function get_net_worth(int $userId): array {
     $pdo = db();
     
-    // A. Cash Balance (Lifetime Income - Lifetime Expense)
+    // A. Cash Balance
     $st = $pdo->prepare("SELECT tx_type, COALESCE(SUM(amount),0) as total FROM transactions WHERE user_id=? GROUP BY tx_type");
     $st->execute([$userId]);
     $inc=0.0; $exp=0.0;
@@ -84,7 +120,7 @@ function get_net_worth(int $userId): array {
     }
     $cash_balance = $inc - $exp;
 
-    // B. Investment Value (Stocks + MF)
+    // B. Investment Value
     $inv = investment_summary($userId);
     $stock_val = 0.0;
     $mf_val = 0.0;
@@ -101,14 +137,12 @@ function get_net_worth(int $userId): array {
     ];
 }
 
-// 2. Trigger Recurring Transactions
 function trigger_recurring(int $userId): int {
     $pdo = db();
-    $today = (int)date('j'); // Day of month (1-31)
+    $today = (int)date('j'); 
     $this_month = date('Y-m');
-    $date_str = date('Y-m-d'); // Transaction date = today
+    $date_str = date('Y-m-d'); 
 
-    // Fetch active recurring items that haven't run this month
     $st = $pdo->prepare("
         SELECT * FROM recurring 
         WHERE user_id=? AND active=1 AND day_of_month <= ? 
@@ -119,15 +153,24 @@ function trigger_recurring(int $userId): int {
 
     $count = 0;
     foreach($items as $item) {
-        // Insert into real transactions
         $pdo->prepare("INSERT INTO transactions(user_id, tx_type, category_id, amount, tx_date, reason) VALUES(?,?,?,?,?,?)")
             ->execute([$userId, $item['type'], $item['category_id'], $item['amount'], $date_str, $item['description'] . ' (Auto)']);
         
-        // Mark as run
         $pdo->prepare("UPDATE recurring SET last_run_month=? WHERE id=?")
             ->execute([$this_month, $item['id']]);
         $count++;
     }
     return $count;
+}
+
+function get_average_savings(int $userId): float {
+    // Uses the optimized last_n_months function
+    $months = last_n_months($userId, 3); 
+    if(empty($months)) return 0;
+    
+    $total = 0;
+    foreach($months as $m) $total += $m['net'];
+    
+    return $total / count($months);
 }
 ?>
