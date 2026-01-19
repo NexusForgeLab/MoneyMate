@@ -1,5 +1,3 @@
-/* MoneyMate/assets/style.css */
-
 :root {
   --bg: #f8f5f2;
   --card-bg: #ffffff;
@@ -25,6 +23,7 @@ body {
   background-size: 24px 24px;
   color: var(--text);
   line-height: 1.5;
+  padding-bottom: 80px; /* Space for scrolling on mobile */
   -webkit-font-smoothing: antialiased;
 }
 
@@ -40,7 +39,7 @@ a { color: inherit; text-decoration: none; }
 .topbar {
   position: sticky;
   top: 0;
-  background: var(--bg);
+  background: var(--bg); /* Keep transparent feel or use rgba(248,245,242,0.95) for backdrop */
   border-bottom: 2px solid var(--border-color);
   padding: 12px 20px;
   display: flex;
@@ -48,7 +47,7 @@ a { color: inherit; text-decoration: none; }
   gap: 12px;
   align-items: center;
   justify-content: space-between;
-  z-index: 100;
+  z-index: 1000;
   box-shadow: 0 4px 0 rgba(0,0,0,0.05);
 }
 
@@ -78,7 +77,6 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  /* Fixed height for alignment with inputs */
   height: 42px; 
   padding: 0 16px; 
   border: 2px solid var(--border-color);
@@ -94,6 +92,7 @@ a { color: inherit; text-decoration: none; }
   transition: transform 0.1s;
   white-space: nowrap;
   vertical-align: middle;
+  text-decoration: none;
 }
 
 .btn:hover {
@@ -117,7 +116,7 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 6px 6px 0 rgba(0,0,0,0.05);
 }
 
-h1, h2 { margin: 0 0 16px 0; font-weight: 800; line-height: 1.2; }
+h1, h2, h3 { margin: 0 0 16px 0; font-weight: 800; line-height: 1.2; }
 h1 { 
   font-size: 1.8rem;
   background: linear-gradient(120deg, transparent 0%, transparent 60%, rgba(52, 199, 89, 0.3) 60%, rgba(52, 199, 89, 0.3) 100%);
@@ -131,16 +130,17 @@ h2 { font-size: 1.3rem; }
   font-family: var(--font-mono);
 }
 
-/* --- Grid System --- */
+/* --- Grid System (Default Mobile First: Stacked) --- */
 .grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
   gap: 20px;
-  align-items: end; /* Aligns inputs and buttons at the bottom */
+  align-items: end;
 }
 [class*="col-"] { grid-column: span 12; }
 
-@media (min-width: 600px) {
+/* Desktop/Tablet Overrides */
+@media (min-width: 700px) {
   .col-6 { grid-column: span 6; }
   .col-4 { grid-column: span 6; } 
   .col-3 { grid-column: span 6; }
@@ -148,7 +148,7 @@ h2 { font-size: 1.3rem; }
   .col-2 { grid-column: span 4; }
 }
 
-@media (min-width: 900px) {
+@media (min-width: 1000px) {
   .col-12{grid-column:span 12}
   .col-8{grid-column:span 8}
   .col-6{grid-column:span 6}
@@ -158,24 +158,60 @@ h2 { font-size: 1.3rem; }
   .col-2{grid-column:span 2}
 }
 
-/* --- Mobile Tweaks --- */
-@media (max-width: 600px) {
-  .wrap { padding: 16px 12px; }
-  .topbar { flex-direction: column; align-items: stretch; gap: 12px; }
-  .brand { align-self: center; transform: rotate(0); width: 100%; text-align: center; }
-  .nav { justify-content: center; gap: 8px; }
-  .nav .btn { flex: 1 1 45%; font-size: 12px; height: 38px; }
+/* --- MOBILE OPTIMIZATIONS --- */
+@media (max-width: 699px) {
+  .wrap { padding: 12px; }
+  
+  /* Stack Header */
+  .topbar { 
+    flex-direction: column; 
+    align-items: stretch; 
+    gap: 12px; 
+    padding: 10px;
+  }
+  
+  .brand { 
+    align-self: center; 
+    transform: rotate(0); 
+    width: 100%; 
+    text-align: center;
+    margin-bottom: 5px;
+  }
+
+  /* Scrollable Horizontal Menu for Mobile */
+  .nav { 
+    justify-content: flex-start; 
+    flex-wrap: nowrap; 
+    overflow-x: auto; 
+    padding-bottom: 5px;
+    -webkit-overflow-scrolling: touch; /* Smooth scroll on iOS */
+    gap: 8px;
+    /* Hide scrollbar but keep functionality */
+    scrollbar-width: none; 
+  }
+  .nav::-webkit-scrollbar { display: none; }
+
+  .nav .btn { 
+    flex: 0 0 auto; /* Don't shrink/grow */
+    font-size: 13px; 
+    height: 36px; 
+    padding: 0 12px;
+  }
+
+  /* Adjust Cards */
   .card { padding: 16px; margin: 12px 0; }
   h1 { font-size: 1.5rem; }
-  input, select, textarea { font-size: 16px; } 
-  /* Reduce gap in grid on mobile */
-  .grid { gap: 12px; }
+  
+  /* Inputs */
+  input, select, textarea { font-size: 16px; } /* Prevents iOS zoom */
+  
+  /* KPI Boxes stack */
+  .kpi .box { flex: 1 1 100%; }
 }
 
 /* --- Forms (Standardized) --- */
 input, select, textarea {
   width: 100%;
-  /* Fixed height for alignment */
   height: 42px;
   padding: 8px 12px;
   border-radius: 6px;
@@ -189,7 +225,6 @@ input, select, textarea {
   vertical-align: middle;
 }
 textarea { height: auto; min-height: 100px; padding: 12px; }
-
 input:focus, select:focus, textarea:focus {
   border-color: var(--border-color);
   box-shadow: 3px 3px 0 #eee;
@@ -250,5 +285,3 @@ th {
   margin-top: 8px;
   font-family: var(--font-body);
 }
-
-hr { border: none; border-top: 1px dashed var(--line-color); margin: 20px 0; }

@@ -216,6 +216,11 @@ $txs = $pdo->prepare("
 $txs->execute([$user['id']]);
 $txs = $txs->fetchAll();
 
+// Pre-fetch transactions for XIRR
+$txStmt = $pdo->prepare("SELECT investment_id, tx_date, side, units, price FROM investment_txs WHERE user_id = ? ORDER BY tx_date ASC");
+$txStmt->execute([$user['id']]);
+$allTxs = $txStmt->fetchAll(PDO::FETCH_GROUP);
+
 render_header('Investments', $user);
 ?>
 <div class="card">
@@ -267,10 +272,24 @@ render_header('Investments', $user);
       <div class="muted">Only currently held assets.</div>
       <div class="table-scroll">
           <table>
-            <thead><tr><th>Type</th><th>Symbol</th><th>Units</th><th>Avg Buy</th><th>Current Price</th><th>Profit/Loss</th><th>Action</th></tr></thead>
+            <thead><tr><th>Type</th><th>Symbol</th><th>Units</th><th>Avg Buy</th><th>Current Price</th><th>Profit/Loss</th><th>XIRR</th><th>Action</th></tr></thead>
             <tbody>
               <?php foreach($summary as $s): ?>
-                <?php if($s['units'] < 0.001) continue; ?>
+                <?php if($s['units'] < 0.001) continue; 
+                
+                    // --- XIRR CALCULATION ---
+                    $invTxs = $allTxs[$s['id']] ?? [];
+                    $cashflows = [];
+                    foreach($invTxs as $t) {
+                        $amt = ($t['side'] === 'BUY') ? -1 * ($t['units'] * $t['price']) : ($t['units'] * $t['price']);
+                        $cashflows[] = ['amount' => $amt, 'date' => $t['tx_date']];
+                    }
+                    if($s['market_value'] > 0) {
+                        $cashflows[] = ['amount' => $s['market_value'], 'date' => date('Y-m-d')];
+                    }
+                    $myXirr = xirr($cashflows);
+                    $xirrColor = ($myXirr > 0) ? 'good' : 'bad';
+                ?>
                 <tr>
                   <td><span class="pill"><?php echo h($s['asset_type']); ?></span></td>
                   <td><b><?php echo h($s['symbol']); ?></b><div class="muted" style="font-size:0.8em"><?php echo h($s['name']); ?></div></td>
@@ -278,6 +297,13 @@ render_header('Investments', $user);
                   <td class="muted">₹<?php echo number_format((float)$s['avg_buy_price'],2); ?></td>
                   <td>₹<?php echo number_format((float)$s['current_price'],2); ?></td>
                   <td class="<?php echo ((float)$s['unrealized_pl']>=0)?'good':'bad'; ?>">₹<?php echo number_format((float)$s['unrealized_pl'],2); ?></td>
+                  <td>
+                    <?php if($myXirr !== null): ?>
+                        <span class="<?php echo $xirrColor; ?>"><?php echo number_format($myXirr, 2); ?>%</span>
+                    <?php else: ?>
+                        <span class="muted">-</span>
+                    <?php endif; ?>
+                  </td>
                   <td>
                     <form method="post" style="display:flex;gap:5px;">
                       <input type="hidden" name="csrf" value="<?php echo h(csrf_token()); ?>"/>

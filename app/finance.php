@@ -173,4 +173,84 @@ function get_average_savings(int $userId): float {
     
     return $total / count($months);
 }
-?>
+
+// --- BUDGET FUNCTIONS ---
+function get_budget_status(int $userId): array {
+    $pdo = db();
+    $monthStart = date('Y-m-01');
+    $monthEnd = date('Y-m-t');
+
+    // Get all categories with their budget amount
+    $sql = "SELECT c.id, c.name, COALESCE(b.amount, 0) as budget 
+            FROM categories c 
+            LEFT JOIN budgets b ON b.category_id = c.id AND b.user_id = ?
+            WHERE c.kind = 'expense'
+            ORDER BY b.amount DESC, c.name ASC";
+    $cats = $pdo->prepare($sql);
+    $cats->execute([$userId]);
+    $result = [];
+
+    // Get actual spending for this month
+    $spentSql = "SELECT category_id, SUM(amount) as total 
+                 FROM transactions 
+                 WHERE user_id = ? AND tx_type = 'expense' 
+                 AND tx_date BETWEEN ? AND ? 
+                 GROUP BY category_id";
+    $spentStmt = $pdo->prepare($spentSql);
+    $spentStmt->execute([$userId, $monthStart, $monthEnd]);
+    $spending = $spentStmt->fetchAll(PDO::FETCH_KEY_PAIR); // [cat_id => amount]
+
+    while($row = $cats->fetch()){
+        $spent = $spending[$row['id']] ?? 0;
+        $budget = (float)$row['budget'];
+        if($budget > 0 || $spent > 0) { // Only show active categories
+            $pct = ($budget > 0) ? ($spent / $budget) * 100 : ($spent > 0 ? 100 : 0);
+            $result[] = [
+                'name' => $row['name'],
+                'budget' => $budget,
+                'spent' => $spent,
+                'pct' => $pct,
+                'id' => $row['id']
+            ];
+        }
+    }
+    return $result;
+}
+
+// --- XIRR CALCULATION (Newton-Raphson) ---
+function xirr(array $transactions, float $guess = 0.1): ?float {
+    // $transactions = [['amount' => -1000, 'date' => '2023-01-01'], ...]
+    // Positive amount = Current Value/Sell, Negative = Buy
+    
+    $limit = 100; $tol = 0.000001;
+    
+    if(empty($transactions)) return null;
+    
+    $t0 = strtotime($transactions[0]['date']);
+    
+    for ($i = 0; $i < $limit; $i++) {
+        $f = 0; $df = 0;
+        foreach ($transactions as $t) {
+            $dt = (strtotime($t['date']) - $t0) / 86400; // Days
+            $years = $dt / 365.0;
+            $f += $t['amount'] * pow(1 + $guess, -$years);
+            $df += -$years * $t['amount'] * pow(1 + $guess, -$years - 1);
+        }
+        
+        if (abs($f) < $tol) return $guess * 100;
+        if ($df == 0) return null;
+        
+        $new_guess = $guess - ($f / $df);
+        if (abs($new_guess - $guess) < $tol) return $new_guess * 100;
+        $guess = $new_guess;
+    }
+    return null;
+}
+
+// --- GOAL FUNCTIONS ---
+function get_goals(int $userId): array {
+    $pdo = db();
+    $st = $pdo->prepare("SELECT * FROM goals WHERE user_id = ? ORDER BY target_date ASC");
+    $st->execute([$userId]);
+    return $st->fetchAll();
+}

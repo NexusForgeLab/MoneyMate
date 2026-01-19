@@ -2,9 +2,13 @@
 require_once __DIR__ . '/app/layout.php';
 require_once __DIR__ . '/app/finance.php';
 require_once __DIR__ . '/app/db.php';
+require_once __DIR__ . '/app/backup.php';
 
 $user = require_login();
 $pdo = db();
+
+// This runs once per day when you visit the dashboard
+run_auto_backup();
 
 // Fetch Net Worth Data
 $nw = get_net_worth($user['id']);

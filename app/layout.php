@@ -39,6 +39,9 @@ function render_header(string $title, ?array $user): void {
     <div class="nav">
       <?php if($user): ?>
         <a class="btn" href="/">Dashboard</a>
+ 	<a class="btn" href="/calendar.php">Calendar</a>
+        <a class="btn" href="/budgets.php">Budgets</a>
+        <a class="btn" href="/goals.php">Goals</a>
         <a class="btn" href="/tx_add.php">Add</a>
         <a class="btn" href="/tx_list.php">History</a>
         <a class="btn" href="/investments.php">Investments</a>
