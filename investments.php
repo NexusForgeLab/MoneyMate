@@ -70,15 +70,17 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
       if($action==='import_stocks'){
         $idx_date = find_col($header, ['date', 'time']);
         $idx_sym  = find_col($header, ['symbol', 'script', 'company']);
+        $idx_name = find_col($header, ['stock name', 'security name']); 
         $idx_type = find_col($header, ['type', 'buy/sell']);
         $idx_qty  = find_col($header, ['quantity', 'qty']);
         $idx_val  = find_col($header, ['value', 'amount']); 
         $idx_rate = find_col($header, ['price', 'rate', 'avg']); 
+        $idx_order = find_col($header, ['order id', 'exchange order id']); 
 
         if($idx_date<0 || $idx_sym<0 || $idx_qty<0) 
           throw new Exception("Columns missing. Need: Date, Symbol, Qty.");
 
-        $count = 0; $skipped = 0;
+        $count = 0; $skipped = 0; $upgraded = 0;
         $pdo->beginTransaction();
         try {
           while (($row = fgetcsv($f)) !== false) {
@@ -88,6 +90,13 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
              $symbol  = strtoupper(trim($row[$idx_sym] ?? ''));
              $typeRaw = strtoupper(trim($row[$idx_type] ?? 'BUY'));
              $units   = (float)($row[$idx_qty] ?? 0);
+             
+             // Name Logic: Use Stock Name if found, else Symbol
+             $name = ($idx_name >= 0) ? trim($row[$idx_name] ?? '') : '';
+             if($name === '') $name = $symbol;
+
+             // Order ID
+             $orderId = ($idx_order >= 0) ? trim($row[$idx_order] ?? '') : '';
              
              $price = 0;
              if($idx_rate >= 0) {
@@ -103,26 +112,68 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
              
              $side = (strpos($typeRaw, 'SELL') !== false) ? 'SELL' : 'BUY';
 
-             $stmt = $pdo->prepare("SELECT id FROM investments WHERE user_id=? AND symbol=? AND asset_type='stock'");
+             // Get Investment ID (Create if not exists)
+             $stmt = $pdo->prepare("SELECT id, name FROM investments WHERE user_id=? AND symbol=? AND asset_type='stock'");
              $stmt->execute([$user['id'], $symbol]);
-             $invId = $stmt->fetchColumn();
+             $existingInv = $stmt->fetch();
+             $invId = $existingInv['id'] ?? null;
 
              if(!$invId){
                 $pdo->prepare("INSERT INTO investments(user_id,asset_type,symbol,name) VALUES(?,?,?,?)")
-                    ->execute([$user['id'], 'stock', $symbol, $symbol]);
+                    ->execute([$user['id'], 'stock', $symbol, $name]);
                 $invId = $pdo->lastInsertId();
+             } else {
+                 if($name !== $symbol && $existingInv['name'] === $symbol) {
+                     $pdo->prepare("UPDATE investments SET name=? WHERE id=?")->execute([$name, $invId]);
+                 }
              }
 
-             $dup = $pdo->prepare("SELECT id FROM investment_txs WHERE investment_id=? AND tx_date=? AND side=? AND units=? AND price=?");
-             $dup->execute([$invId, $tx_date, $side, $units, $price]);
-             if($dup->fetchColumn()){ $skipped++; continue; }
+             // --- SMART DUPLICATE HANDLING (FIXED) ---
+             
+             // 1. EXACT MATCH: Check if this specific Order ID already exists.
+             if($orderId !== '') {
+                 $chk = $pdo->prepare("SELECT id FROM investment_txs WHERE investment_id=? AND note LIKE ?");
+                 $chk->execute([$invId, "%$orderId%"]);
+                 if($chk->fetchColumn()) {
+                     $skipped++; 
+                     continue; // Already imported exactly
+                 }
+             }
 
+             // 2. FUZZY MATCH & LEGACY UPGRADE
+             // Find ALL candidates that match date/price/units
+             $dupStmt = $pdo->prepare("SELECT id, note FROM investment_txs WHERE investment_id=? AND tx_date=? AND side=? AND units=? AND ABS(price - ?) < 0.01");
+             $dupStmt->execute([$invId, $tx_date, $side, $units, $price]);
+             $candidates = $dupStmt->fetchAll();
+
+             $claimedLegacy = false;
+             foreach($candidates as $cand) {
+                 // Check if this candidate is "Available" (No Order ID yet)
+                 if (strpos($cand['note'], 'Order ID') === false) {
+                     // Found a clean Legacy record! Claim it!
+                     if ($orderId !== '') {
+                         $newNote = $cand['note'] . " (Order ID: $orderId)";
+                         $pdo->prepare("UPDATE investment_txs SET note=? WHERE id=?")->execute([$newNote, $cand['id']]);
+                         $upgraded++;
+                     }
+                     $claimedLegacy = true;
+                     break; // Stop looking. We matched this CSV row to one specific legacy DB row.
+                 }
+             }
+
+             if ($claimedLegacy) {
+                 $skipped++; 
+                 continue; // We upgraded an existing record, so we don't insert a new one.
+             }
+
+             // 3. INSERT (If no exact match, and no legacy match to claim)
+             $note = 'Groww Stock' . ($orderId ? " (Order ID: $orderId)" : "");
              $pdo->prepare("INSERT INTO investment_txs(user_id,investment_id,side,units,price,tx_date,note) VALUES(?,?,?,?,?,?,?)")
-                 ->execute([$user['id'], $invId, $side, $units, $price, $tx_date, 'Groww Stock']);
+                 ->execute([$user['id'], $invId, $side, $units, $price, $tx_date, $note]);
              $count++;
           }
           $pdo->commit();
-          $ok = "Imported $count stocks. Skipped $skipped duplicates.";
+          $ok = "Imported $count new stocks. Updated $upgraded legacy records. Skipped $skipped duplicates.";
         } catch(Exception $e){ $pdo->rollBack(); throw $e; }
       }
 
@@ -175,6 +226,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
                 $invId = $pdo->lastInsertId();
              }
 
+             // Basic MF check
              $dup = $pdo->prepare("SELECT id FROM investment_txs WHERE investment_id=? AND tx_date=? AND side=? AND units=? AND ABS(price - ?) < 0.1");
              $dup->execute([$invId, $tx_date, $side, $units, $nav]);
              if($dup->fetchColumn()){ $skipped++; continue; }
@@ -272,7 +324,7 @@ render_header('Investments', $user);
       <div class="muted">Only currently held assets.</div>
       <div class="table-scroll">
           <table>
-            <thead><tr><th>Type</th><th>Symbol</th><th>Units</th><th>Avg Buy</th><th>Current Price</th><th>Profit/Loss</th><th>XIRR</th><th>Action</th></tr></thead>
+            <thead><tr><th>Type</th><th>Asset</th><th>Units</th><th>Avg Buy</th><th>Current Price</th><th>Profit/Loss</th><th>XIRR</th><th>Action</th></tr></thead>
             <tbody>
               <?php foreach($summary as $s): ?>
                 <?php if($s['units'] < 0.001) continue; 
@@ -292,7 +344,10 @@ render_header('Investments', $user);
                 ?>
                 <tr>
                   <td><span class="pill"><?php echo h($s['asset_type']); ?></span></td>
-                  <td><b><?php echo h($s['symbol']); ?></b><div class="muted" style="font-size:0.8em"><?php echo h($s['name']); ?></div></td>
+                  <td>
+                      <b><?php echo h($s['name']); ?></b>
+                      <div class="muted" style="font-size:0.8em"><?php echo h($s['symbol']); ?></div>
+                  </td>
                   <td><?php echo number_format((float)$s['units'], 2); ?></td>
                   <td class="muted">₹<?php echo number_format((float)$s['avg_buy_price'],2); ?></td>
                   <td>₹<?php echo number_format((float)$s['current_price'],2); ?></td>
@@ -337,7 +392,10 @@ render_header('Investments', $user);
                 ?>
                 <tr>
                   <td class="muted"><?php echo h($t['tx_date']); ?></td>
-                  <td><?php echo h($t['symbol']); ?><div class="muted" style="font-size:0.8em"><?php echo h($t['name']); ?></div></td>
+                  <td>
+                      <b><?php echo h($t['name']); ?></b>
+                      <div class="muted" style="font-size:0.8em"><?php echo h($t['symbol']); ?></div>
+                  </td>
                   <td><span class="pill <?php echo $t['side']==='BUY'?'good':'bad';?>"><?php echo h($label); ?></span></td>
                   <td><?php echo number_format((float)$t['units'],4); ?></td>
                   <td>₹<?php echo number_format((float)$t['price'],2); ?></td>
